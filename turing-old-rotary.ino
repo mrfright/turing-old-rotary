@@ -10,6 +10,8 @@ Coded by Eric Faehnrich
 #include <WaveHC.h>
 #include <WaveUtil.h>
 
+#define DEBUG
+
 enum State {
   nodial,
   dialing,
@@ -25,23 +27,19 @@ FatReader root;   // This holds the information for the volumes root directory
 FatReader f;      // This holds the information for the file we're play
 WaveHC wave;      // This is the only wave (audio) object, since we will only play one at a time
 
-uint8_t dirLevel; // indent level for file/dir names    (for prettyprinting)
-dir_t dirBuf;     // buffer for directory reads
-
 const int hangPin = 6; //pin for reciever switch. closed (HIGH) when hung up, open (LOW) when off the hook
 const int dialPin = 7; //pin for dialing switch. close (HIGH) when  dialing, open (LOW) when not dialing
 const int countPin = 8; //pin for counting switch.  closed (HIGH) for don't count, open (LOW) for each count
 const int ledPin = 13; //LED pin
 
 int dialCount = 0;
-#define DIAL_ARRAY_LEN 10
+#define DIAL_ARRAY_LEN 50
 int dialArray[DIAL_ARRAY_LEN];
 int dialIndex = 0;
 
-int p1[] = {1, 2, 3, 4};
+int p1[] = {1, 9, 5, 4};
 const int p1_len = 4;
-int p2[] = {0, 9, 8, 7};
-const int p2_len = 4;
+
 
 int ledState = HIGH;
 int hangState; //current reciever reading
@@ -65,13 +63,19 @@ void playfile(char *name) {
   }
 
   if (!f.open(root, name)) {
+    
+    #ifdef DEBUG
     putstring_nl("Couldn't open file "); 
     Serial.print(name); 
+    #endif//DEBUG
+    
     return;
   }
 
   if (!wave.create(f)) {
+    #ifdef DEBUG
     putstring_nl("Not a valid WAV"); return;
+    #endif//DEBUG
   }
   
   wave.play();
@@ -80,20 +84,24 @@ void playfile(char *name) {
 
 void setup() {
   
+  #ifdef DEBUG
   Serial.begin(9600);           // set up Serial library at 9600 bps for debugging
   
   putstring_nl("\nTest");  // say we woke up!
   
   putstring("Free RAM: ");       // This can help with debugging, running out of RAM is bad
   Serial.println(FreeRam());
-
+  #endif//DEBUG
+  
   //  if (!card.init(true)) { //play with 4 MHz spi if 8MHz isn't working for you
   if (!card.init()) {         //play with 8 MHz spi (default faster!)  
+    #ifdef DEBUG
     putstring_nl("Card init. failed!");  // Something went wrong, lets print out why
+    #endif//DEBUG    
   }
   
   // enable optimize read - some cards may timeout. Disable if you're having problems
-  card.partialBlockRead(true);
+  //card.partialBlockRead(true);
   
   // Now we will look for a FAT partition!
   uint8_t part;
@@ -102,26 +110,33 @@ void setup() {
       break;                           // we found one, lets bail
   }
   if (part == 5) {                     // if we ended up not finding one  :(
+    #ifdef DEBUG
     putstring_nl("No valid FAT partition!");  // Something went wrong, lets print out why
+    #endif//DEBUG
   }
   
   // Lets tell the user about what we found
+  #ifdef DEBUG
   putstring("Using partition ");
   Serial.print(part, DEC);
   putstring(", type is FAT");
   Serial.println(vol.fatType(), DEC);     // FAT16 or FAT32?
+  #endif//DEBUG
   
   // Try to open the root directory
   if (!root.openRoot(vol)) {
+    #ifdef DEBUG
     putstring_nl("Can't open root dir!");      // Something went wrong,
+    #endif//DEBUG
   }
   
+  #ifdef DEBUG
   // Whew! We got past the tough parts.
   putstring_nl("Files found (* = fragmented):");
 
   // Print out all of the files in all the directories.
   root.ls(LS_R | LS_FLAG_FRAGMENTED);
-  
+  #endif
   
   pinMode(hangPin, INPUT);
   pinMode(dialPin, INPUT);
@@ -147,10 +162,14 @@ void loop() {
       
       if(hangState == LOW) {//if first time off hook, start dial tone
         phoneState = nodial;
+        #ifdef DEBUG
         putstring_nl("hang low");
+        #endif
       }   
       else {
+        #ifdef DEBUG
         putstring_nl("hang high");
+        #endif
       }
     }
   }
@@ -184,6 +203,7 @@ void loop() {
         dialState = dialReading; 
         ledState = dialState;
         
+        #ifdef DEBUG
         if(dialState == LOW) {
           putstring("dial low");
           if(dialReading == HIGH) {
@@ -193,14 +213,16 @@ void loop() {
             putstring("\tdial reading high\n");
           }
         }
+        #endif
         
         //if just started dialing, reset count
         if(dialState == HIGH) {
           dialCount = 0;
+          #ifdef DEBUG
           putstring_nl("dial high");
-          
-
+          #endif
         }
+        
         //if just ended dialing, save count, set to dialing state if recied a count > 0 (10 is the real zero)
         //if dialindex bigger than dial array size, then act like wrong number
         //if dialed number matches anything then play
@@ -223,21 +245,9 @@ void loop() {
           }
           
           if(match) {
-            playfile("P1.WAV");
+            playfile("ESP.WAV");
           }
           
-          i = 0;
-          match = 1;
-          for(i = 0; i < p2_len; i++) {
-            if(p2[i] != dialArray[i]) {
-              match = 0;
-              break;
-            }
-          }
-          
-          if(match) {
-            playfile("P2.WAV");
-          }
           
         }  
       }
@@ -257,13 +267,15 @@ void loop() {
           //if just started dialing, reset count
           if(countState == LOW) {
             dialCount++;
+            #ifdef DEBUG
             putstring_nl("count low");
-  
+            #endif
           }
+          #ifdef DEBUG
           else {
             putstring_nl("count high");
           }
-
+          #endif
         }
       }
     }
