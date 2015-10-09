@@ -5,6 +5,11 @@ This is the Arduino code for the old black rotary phone prop
 used in the Theater Ninjas play Turing Machine.
 
 Coded by Eric Faehnrich
+
+don't have 0 in file name, must be in root directory of sd card
+
+22khz 16 bit mono
+ffmpeg -i 111.mp3 -acodec pcm_s16le -ac 1 -ar 16000 out.wav
 */
 
 #include <WaveHC.h>
@@ -27,13 +32,13 @@ FatReader root;   // This holds the information for the volumes root directory
 FatReader f;      // This holds the information for the file we're play
 WaveHC wave;      // This is the only wave (audio) object, since we will only play one at a time
 
-const int hangPin = 6; //pin for reciever switch. closed (HIGH) when hung up, open (LOW) when off the hook
-const int dialPin = 7; //pin for dialing switch. close (HIGH) when  dialing, open (LOW) when not dialing
-const int countPin = 8; //pin for counting switch.  closed (HIGH) for don't count, open (LOW) for each count
-const int ledPin = 13; //LED pin
+#define hangPin  6 //pin for reciever switch. closed (HIGH) when hung up, open (LOW) when off the hook
+#define dialPin 7 //pin for dialing switch. close (HIGH) when  dialing, open (LOW) when not dialing
+#define countPin 8 //pin for counting switch.  closed (HIGH) for don't count, open (LOW) for each count
+#define ledPin 13 //LED pin
 
 int dialCount = 0;
-#define DIAL_ARRAY_LEN 50
+#define DIAL_ARRAY_LEN 10
 int dialArray[DIAL_ARRAY_LEN];
 int dialIndex = 0;
 
@@ -52,8 +57,8 @@ int lastCountState = LOW;
 long lastHangDebounceTime = 0;  // the last time the reciever pin was toggled
 long lastDialDebounceTime = 0; // last time the dial switch was toggled
 long lastCountDebounceTime = 0;
-const long debounceDelay = 50;    // the debounce time; increase if the output flickers
-const long countDebounceDelay = 10;
+#define debounceDelay 50    // the debounce time; increase if the output flickers
+#define countDebounceDelay 10
 
 State phoneState = nodial;
 
@@ -81,6 +86,58 @@ void playfile(char *name) {
   wave.play();
 }
 
+
+#define NUMMAX 10
+short nums[NUMMAX];
+short numindex = 0;//points to first empty space
+char FileName[NUMMAX+5];
+
+void addnum(char num) {
+  if(numindex < NUMMAX) {
+    nums[numindex++] = num;
+  }
+  #ifdef DEBUG
+  else {
+    Serial.println("numindex over max");
+  }
+  #endif//DEBUG
+}
+
+void removenum() {
+  if(numindex > 0) {
+    --numindex;
+  }
+  #ifdef DEBUG
+  else {
+    Serial.println("trying to remove from empty num list");
+  }
+  #endif//DEBUG
+}
+
+short fillnum() {
+  short fnindex;
+  {for(fnindex = 0; fnindex < numindex; ++fnindex) {
+    Serial.println(nums[fnindex]);
+    FileName[fnindex] = (char)(nums[fnindex] + '0');
+  }}
+
+  return fnindex;
+}
+
+void makeFileName() {
+  short fnindex = fillnum();
+
+  FileName[fnindex++] = '.';
+  FileName[fnindex++] = 'w';
+  FileName[fnindex++] = 'a';
+  FileName[fnindex++] = 'v';
+  FileName[fnindex++] = '\0';
+}
+
+void printFileName() {
+  makeFileName();
+  Serial.println(FileName);
+}
 
 void setup() {
   
@@ -167,6 +224,7 @@ void loop() {
         #endif
       }   
       else {
+        numindex = 0;//empty 
         #ifdef DEBUG
         putstring_nl("hang high");
         #endif
@@ -245,10 +303,69 @@ void loop() {
           }
           
           if(match) {
-            playfile("ESP.WAV");
+            //playfile("612.WAV");
           }
-          
-          
+
+          wave.stop();//seems finding files could fail while playing a file
+                      //maybe checks for files existing fail because lock on playing file
+
+          //if not 10 (0)
+          if(dialCount < 10) {
+            //add number dialed to array
+            addnum(dialCount);
+
+            //convert nums array to string
+            
+            printFileName();
+
+
+            
+            
+            //if there's a file with that name
+            #ifdef DEBUG
+            putstring_nl("before file check");
+            #endif
+            if (f.open(root, FileName)) {
+              //keeping that int in the array
+              //play that file 
+              #ifdef DEBUG
+              Serial.println("Found file, playing");
+              #endif//DEBUG
+              playfile(FileName);           
+            }
+            //if not
+            else {
+              #ifdef DEBUG
+              Serial.println("File not found");
+              #endif//DEBUG
+              //remove that number (move index)
+              
+              --numindex;
+              makeFileName();
+              //play the current error message there again (or default error if not)
+              playfile("error.wav"); 
+              while(wave.isplaying);
+              //replay this levels message
+              playfile(FileName); 
+            }
+          }
+          //else was 10(0) so move up one
+          else {
+            //TODO don't delete the last number
+            #ifdef DEBUG
+            Serial.println("numindex=");
+            Serial.println(numindex);
+            #endif//DEBUG
+            
+            removenum();
+            
+            #ifdef DEBUG
+            printFileName();
+            #endif//DEBUG
+            
+            //play message
+            playfile(FileName);  
+          }
         }  
       }
     }
